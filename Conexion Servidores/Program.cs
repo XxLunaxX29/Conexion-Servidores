@@ -4,6 +4,8 @@ using System.Data;
 var xmlLoader = new XmlDatasetLoader();
 var csvLoader = new CsvDatasetLoader();
 var jsonLoader = new JsonDatasetLoader();
+var datasetManager = new DatasetManager("MiDataset");
+
 DataTable dataTable = null;
 bool archivosCargados = false;
 string tipoArchivoActual = "";
@@ -19,6 +21,7 @@ while (true)
     if (archivosCargados)
     {
         Console.WriteLine($"✓ Archivo cargado ({tipoArchivoActual}): {dataTable.Rows.Count} filas | {dataTable.Columns.Count} columnas");
+        Console.WriteLine($"✓ Datos en memoria: {datasetManager.ObtenerTotal()} registros\n");
     }
     else
     {
@@ -31,8 +34,11 @@ while (true)
     Console.WriteLine("3. Cargar archivo JSON");
     Console.WriteLine("4. Mostrar datos");
     Console.WriteLine("5. Filtrar datos");
-    Console.WriteLine("6. Generar gráfico");
-    Console.WriteLine("7. Salir");
+    Console.WriteLine("6. Buscar en memoria");
+    Console.WriteLine("7. Agrupar datos");
+    Console.WriteLine("8. Ver estadísticas");
+    Console.WriteLine("9. Generar gráfico");
+    Console.WriteLine("10. Salir");
     Console.Write("\nOpción: ");
 
     string opcion = Console.ReadLine();
@@ -40,15 +46,15 @@ while (true)
     switch (opcion)
     {
         case "1":
-            CargarArchivoXml(ref xmlLoader, ref dataTable, ref archivosCargados, ref tipoArchivoActual, ref loaderActual);
+            CargarArchivoXml(ref xmlLoader, ref dataTable, ref archivosCargados, ref tipoArchivoActual, ref loaderActual, datasetManager);
             break;
 
         case "2":
-            CargarArchivoCsv(ref csvLoader, ref dataTable, ref archivosCargados, ref tipoArchivoActual, ref loaderActual);
+            CargarArchivoCsv(ref csvLoader, ref dataTable, ref archivosCargados, ref tipoArchivoActual, ref loaderActual, datasetManager);
             break;
 
         case "3":
-            CargarArchivoJson(ref jsonLoader, ref dataTable, ref archivosCargados, ref tipoArchivoActual, ref loaderActual);
+            CargarArchivoJson(ref jsonLoader, ref dataTable, ref archivosCargados, ref tipoArchivoActual, ref loaderActual, datasetManager);
             break;
 
         case "4":
@@ -63,10 +69,29 @@ while (true)
 
         case "6":
             if (ValidarDatos(archivosCargados))
-                GenerarGrafico(dataTable);
+                BuscarEnMemoria(datasetManager, dataTable);
             break;
 
         case "7":
+            if (ValidarDatos(archivosCargados))
+                AgruparDatos(datasetManager, dataTable);
+            break;
+
+        case "8":
+            if (ValidarDatos(archivosCargados))
+            {
+                datasetManager.MostrarInformacion();
+                Console.WriteLine("\nPresione cualquier tecla...");
+                Console.ReadKey();
+            }
+            break;
+
+        case "9":
+            if (ValidarDatos(archivosCargados))
+                GenerarGrafico(dataTable);
+            break;
+
+        case "10":
             Console.WriteLine("\n✓ Saliendo del programa...");
             return;
 
@@ -125,7 +150,7 @@ static void MostrarTabla(DataTable dataTable, int filaInicio, int filaFin, int a
     }
 }
 
-static void CargarArchivoXml(ref XmlDatasetLoader loader, ref DataTable dataTable, ref bool archivosCargados, ref string tipoArchivoActual, ref object loaderActual)
+static void CargarArchivoXml(ref XmlDatasetLoader loader, ref DataTable dataTable, ref bool archivosCargados, ref string tipoArchivoActual, ref object loaderActual, DatasetManager datasetManager)
 {
     Console.Clear();
     Console.WriteLine("╔═════════════════════════════════════════════╗");
@@ -148,6 +173,7 @@ static void CargarArchivoXml(ref XmlDatasetLoader loader, ref DataTable dataTabl
     try
     {
         dataTable = loader.LoadXmlFile(xmlPath, elementName);
+        datasetManager.CargarDesdeDataTable(dataTable);
         archivosCargados = true;
         tipoArchivoActual = "XML";
         loaderActual = loader;
@@ -162,7 +188,7 @@ static void CargarArchivoXml(ref XmlDatasetLoader loader, ref DataTable dataTabl
     Console.ReadKey();
 }
 
-static void CargarArchivoCsv(ref CsvDatasetLoader loader, ref DataTable dataTable, ref bool archivosCargados, ref string tipoArchivoActual, ref object loaderActual)
+static void CargarArchivoCsv(ref CsvDatasetLoader loader, ref DataTable dataTable, ref bool archivosCargados, ref string tipoArchivoActual, ref object loaderActual, DatasetManager datasetManager)
 {
     Console.Clear();
     Console.WriteLine("╔═════════════════════════════════════════════╗");
@@ -185,6 +211,7 @@ static void CargarArchivoCsv(ref CsvDatasetLoader loader, ref DataTable dataTabl
     try
     {
         dataTable = loader.LoadCsvFile(csvPath, tieneEncabezado == "s");
+        datasetManager.CargarDesdeDataTable(dataTable);
         archivosCargados = true;
         tipoArchivoActual = "CSV";
         loaderActual = loader;
@@ -199,7 +226,7 @@ static void CargarArchivoCsv(ref CsvDatasetLoader loader, ref DataTable dataTabl
     Console.ReadKey();
 }
 
-static void CargarArchivoJson(ref JsonDatasetLoader loader, ref DataTable dataTable, ref bool archivosCargados, ref string tipoArchivoActual, ref object loaderActual)
+static void CargarArchivoJson(ref JsonDatasetLoader loader, ref DataTable dataTable, ref bool archivosCargados, ref string tipoArchivoActual, ref object loaderActual, DatasetManager datasetManager)
 {
     Console.Clear();
     Console.WriteLine("╔═════════════════════════════════════════════╗");
@@ -219,6 +246,7 @@ static void CargarArchivoJson(ref JsonDatasetLoader loader, ref DataTable dataTa
     try
     {
         dataTable = loader.LoadJsonFile(jsonPath);
+        datasetManager.CargarDesdeDataTable(dataTable);
         archivosCargados = true;
         tipoArchivoActual = "JSON";
         loaderActual = loader;
@@ -347,7 +375,6 @@ static void FiltrarDatos(DataTable dataTable)
             return;
         }
 
-        // Si selecciona 0, termina de agregar filtros
         if (columnaIndex == 0)
         {
             if (filtros.Count == 0)
@@ -360,7 +387,6 @@ static void FiltrarDatos(DataTable dataTable)
             break;
         }
 
-        // Validar que la columna existe
         if (columnaIndex < 1 || columnaIndex > dataTable.Columns.Count)
         {
             Console.WriteLine("✗ Opción no válida. Presione cualquier tecla...");
@@ -370,7 +396,6 @@ static void FiltrarDatos(DataTable dataTable)
 
         string columna = dataTable.Columns[columnaIndex - 1].ColumnName;
 
-        // Verificar si ya existe un filtro para esta columna
         if (filtros.ContainsKey(columna))
         {
             Console.WriteLine($"\n⚠ Ya hay un filtro para '{columna}'. ¿Desea reemplazarlo? (s/n): ");
@@ -407,7 +432,6 @@ static void FiltrarDatos(DataTable dataTable)
         }
     }
 
-    // Aplicar todos los filtros
     var filasFiltradas = dataTable.AsEnumerable().ToList();
 
     foreach (var filtro in filtros)
@@ -442,7 +466,6 @@ static void FiltrarDatos(DataTable dataTable)
 
     int anchoColumna = CalcularAnchoColumna(dataTable);
 
-    // Mostrar encabezados
     foreach (DataColumn column in dataTable.Columns)
     {
         string nombre = column.ColumnName.Length > anchoColumna 
@@ -453,7 +476,6 @@ static void FiltrarDatos(DataTable dataTable)
     Console.WriteLine();
     Console.WriteLine(new string('-', Console.WindowWidth - 1));
 
-    // Mostrar datos filtrados
     foreach (var row in filasFiltradas)
     {
         foreach (var cell in row.ItemArray)
@@ -470,6 +492,96 @@ static void FiltrarDatos(DataTable dataTable)
     Console.ReadKey();
 }
 
+static void BuscarEnMemoria(DatasetManager datasetManager, DataTable dataTable)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║       BUSCAR EN MEMORIA (ÍNDICES)      ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.WriteLine("Columnas disponibles:");
+    for (int i = 0; i < dataTable.Columns.Count; i++)
+    {
+        Console.WriteLine($"{i + 1}. {dataTable.Columns[i].ColumnName}");
+    }
+
+    Console.Write("\nSeleccione columna: ");
+    if (!int.TryParse(Console.ReadLine(), out int columnaIndex) || columnaIndex < 1 || columnaIndex > dataTable.Columns.Count)
+    {
+        Console.WriteLine("✗ Opción no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    string columna = dataTable.Columns[columnaIndex - 1].ColumnName;
+    Console.Write($"Ingrese valor a buscar en '{columna}': ");
+    string valor = Console.ReadLine();
+
+    Console.WriteLine("\n⏳ Buscando en índices...");
+    var resultados = datasetManager.BuscarPorColumnaContiene(columna, valor);
+
+    Console.Clear();
+    Console.WriteLine($"╔════════════════════════════════════════╗");
+    Console.WriteLine($"║  RESULTADOS: {resultados.Count} registros encontrados");
+    Console.WriteLine($"╚════════════════════════════════════════╝\n");
+
+    if (resultados.Count > 0)
+    {
+        var datosExportados = datasetManager.ExportarADataTable(resultados);
+        int anchoColumna = CalcularAnchoColumna(datosExportados);
+        MostrarTabla(datosExportados, 0, Math.Min(10, datosExportados.Rows.Count), anchoColumna);
+    }
+    else
+    {
+        Console.WriteLine("No se encontraron registros.");
+    }
+
+    Console.WriteLine("\nPresione cualquier tecla...");
+    Console.ReadKey();
+}
+
+static void AgruparDatos(DatasetManager datasetManager, DataTable dataTable)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║       AGRUPAR DATOS POR COLUMNA        ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.WriteLine("Columnas disponibles:");
+    for (int i = 0; i < dataTable.Columns.Count; i++)
+    {
+        Console.WriteLine($"{i + 1}. {dataTable.Columns[i].ColumnName}");
+    }
+
+    Console.Write("\nSeleccione columna para agrupar: ");
+    if (!int.TryParse(Console.ReadLine(), out int columnaIndex) || columnaIndex < 1 || columnaIndex > dataTable.Columns.Count)
+    {
+        Console.WriteLine("✗ Opción no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    string columna = dataTable.Columns[columnaIndex - 1].ColumnName;
+    Console.WriteLine($"\n⏳ Agrupando datos por '{columna}'...");
+
+    var grupos = datasetManager.AgruparPor(columna);
+
+    Console.Clear();
+    Console.WriteLine($"╔════════════════════════════════════════╗");
+    Console.WriteLine($"║  GRUPOS POR '{columna}': {grupos.Count} grupos");
+    Console.WriteLine($"╚════════════════════════════════════════╝\n");
+
+    int indice = 1;
+    foreach (var grupo in grupos)
+    {
+        Console.WriteLine($"{indice}. {grupo.Key} → {grupo.Value.Count} registros");
+        indice++;
+    }
+
+    Console.WriteLine("\nPresione cualquier tecla...");
+    Console.ReadKey();
+}
+
 static void GenerarGrafico(DataTable dataTable)
 {
     Console.Clear();
@@ -477,7 +589,6 @@ static void GenerarGrafico(DataTable dataTable)
     Console.WriteLine("║         GENERAR GRÁFICO                ║");
     Console.WriteLine("╚════════════════════════════════════════╝\n");
 
-    // Identificar columnas numéricas y parcialmente numéricas
     var columnasNumericas = new List<string>();
     var columnasParcialesNumericas = new Dictionary<string, double>();
 
@@ -487,7 +598,6 @@ static void GenerarGrafico(DataTable dataTable)
         int valoresNumericos = 0;
         int totalValores = 0;
 
-        // Contar valores numéricos en la columna
         foreach (DataRow row in dataTable.Rows)
         {
             totalValores++;
@@ -497,7 +607,6 @@ static void GenerarGrafico(DataTable dataTable)
             }
         }
 
-        // Si tiene al menos 80% de valores numéricos, se considera válida
         double porcentajeNumerico = (double)valoresNumericos / totalValores * 100;
 
         if (valoresNumericos == totalValores)
@@ -517,11 +626,9 @@ static void GenerarGrafico(DataTable dataTable)
         return;
     }
 
-    // Mostrar columnas disponibles
     Console.WriteLine("Columnas numéricas disponibles:\n");
     int indice = 1;
 
-    // Mostrar columnas completamente numéricas
     if (columnasNumericas.Count > 0)
     {
         Console.WriteLine("✓ Completamente numéricas:");
@@ -533,10 +640,9 @@ static void GenerarGrafico(DataTable dataTable)
         Console.WriteLine();
     }
 
-    // Mostrar columnas parcialmente numéricas
     if (columnasParcialesNumericas.Count > 0)
     {
-        Console.WriteLine("⚠ Parcialmente numéricas (con algunos valores no numéricos):");
+        Console.WriteLine("⚠ Parcialmente numéricas:");
         foreach (var columna in columnasParcialesNumericas)
         {
             Console.WriteLine($"{indice}. {columna.Key} ({columna.Value:F1}% numéricos)");
@@ -545,7 +651,6 @@ static void GenerarGrafico(DataTable dataTable)
         Console.WriteLine();
     }
 
-    // Seleccionar columna
     Console.Write("Seleccione la columna a graficar (número): ");
     if (!int.TryParse(Console.ReadLine(), out int columnaIndex))
     {
@@ -557,7 +662,6 @@ static void GenerarGrafico(DataTable dataTable)
     string columnaSeleccionada = null;
     int contador = 1;
 
-    // Buscar la columna seleccionada
     foreach (var columna in columnasNumericas)
     {
         if (contador == columnaIndex)
@@ -588,7 +692,6 @@ static void GenerarGrafico(DataTable dataTable)
         return;
     }
 
-    // Obtener valores numéricos de la columna seleccionada
     var valores = new List<double>();
 
     for (int i = 0; i < dataTable.Rows.Count; i++)
@@ -601,12 +704,11 @@ static void GenerarGrafico(DataTable dataTable)
 
     if (valores.Count == 0)
     {
-        Console.WriteLine("✗ No se encontraron valores numéricos en la columna seleccionada. Presione cualquier tecla...");
+        Console.WriteLine("✗ No se encontraron valores numéricos. Presione cualquier tecla...");
         Console.ReadKey();
         return;
     }
 
-    // Seleccionar tipo de gráfico
     Console.WriteLine("\nTipos de gráficos disponibles:");
     Console.WriteLine("1. Valores individuales (serie de datos)");
     Console.WriteLine("2. Histograma de frecuencias (contar repeticiones)");
@@ -631,21 +733,18 @@ static void GenerarGrafico(DataTable dataTable)
 
 static void MostrarGraficoValoresIndividuales(string columnaSeleccionada, List<double> valores, int totalFilas)
 {
-    // Mostrar información sobre saltos de valores
     if (valores.Count < totalFilas)
     {
         Console.WriteLine($"\n⚠ Nota: Se saltaron {totalFilas - valores.Count} filas con valores no numéricos.");
         Console.ReadKey();
     }
 
-    // Generar gráfico
     Console.Clear();
     Console.WriteLine($"╔════════════════════════════════════════╗");
     Console.WriteLine($"║  GRÁFICO: {columnaSeleccionada}");
     Console.WriteLine($"║  Mostrando {Math.Min(15, valores.Count)} de {valores.Count} valores");
     Console.WriteLine($"╚════════════════════════════════════════╝\n");
 
-    // Gráfico de barras
     double maxValor = valores.Max();
     double minValor = valores.Min();
 
@@ -655,14 +754,12 @@ static void MostrarGraficoValoresIndividuales(string columnaSeleccionada, List<d
         double porcentaje = (valor - minValor) / (maxValor - minValor);
         int barraLength = (int)(porcentaje * 50);
         
-        // Asegurar que al menos haya una pequeña barra si el valor no es el mínimo
         if (barraLength == 0 && valor > minValor)
             barraLength = 1;
 
         Console.WriteLine($"{i + 1:D3}. {new string('█', barraLength)} {valor:F2}");
     }
 
-    // Mostrar estadísticas
     Console.WriteLine();
     Console.WriteLine("╔════════════════════════════════════════╗");
     Console.WriteLine($"║  Máximo: {maxValor:F2}");
@@ -682,7 +779,6 @@ static void MostrarHistogramaFrecuencias(string columnaSeleccionada, List<double
     Console.WriteLine($"║  HISTOGRAMA DE FRECUENCIAS: {columnaSeleccionada}");
     Console.WriteLine($"╚════════════════════════════════════════╝\n");
 
-    // Contar frecuencias de cada valor
     var frecuencias = new Dictionary<double, int>();
     
     foreach (var valor in valores)
@@ -697,13 +793,9 @@ static void MostrarHistogramaFrecuencias(string columnaSeleccionada, List<double
         }
     }
 
-    // Ordenar por frecuencia descendente
     var frecuenciasOrdenadas = frecuencias.OrderByDescending(x => x.Value).ThenBy(x => x.Key).ToList();
 
-    // Encontrar la máxima frecuencia para escalar el gráfico
     int maxFrecuencia = frecuenciasOrdenadas.Max(x => x.Value);
-
-    // Mostrar histograma (máximo 20 valores únicos)
     int limite = Math.Min(20, frecuenciasOrdenadas.Count);
     
     Console.WriteLine($"Mostrando {limite} de {frecuenciasOrdenadas.Count} valores únicos\n");
@@ -715,14 +807,12 @@ static void MostrarHistogramaFrecuencias(string columnaSeleccionada, List<double
         double porcentaje = (double)frecuencia / maxFrecuencia;
         int barraLength = (int)(porcentaje * 50);
 
-        // Asegurar que al menos haya una barra
         if (barraLength == 0)
             barraLength = 1;
 
         Console.WriteLine($"{valor:F2} │ {new string('█', barraLength)} {frecuencia} veces ({(double)frecuencia / valores.Count * 100:F1}%)");
     }
 
-    // Mostrar estadísticas
     Console.WriteLine();
     Console.WriteLine("╔════════════════════════════════════════╗");
     Console.WriteLine($"║  Total de valores: {valores.Count}");
