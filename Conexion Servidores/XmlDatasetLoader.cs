@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Linq;
 using System.Xml.Linq;
 
 namespace ConexionServidores
@@ -35,7 +34,15 @@ namespace ConexionServidores
                 var xmlDoc = XDocument.Load(xmlFilePath);
                 _dataTable = new DataTable();
 
-                var elements = xmlDoc.Descendants(elementName).ToList();
+                // Obtener elementos sin LINQ
+                var elements = new List<XElement>();
+                foreach (var element in xmlDoc.Descendants())
+                {
+                    if (element.Name.LocalName == elementName)
+                    {
+                        elements.Add(element);
+                    }
+                }
 
                 if (elements.Count == 0)
                     throw new InvalidOperationException($"No se encontraron elementos con el nombre: {elementName}");
@@ -46,7 +53,10 @@ namespace ConexionServidores
                 Console.WriteLine("? Extrayendo columnas...");
                 var allColumns = ExtractAllColumns(elements);
 
-                // Crear columnas en la tabla (solo las que tienen datos)
+                // Ordenar columnas alfabéticamente sin LINQ
+                SortColumnsAlphabetically(allColumns);
+
+                // Crear columnas en la tabla
                 foreach (var column in allColumns)
                 {
                     _dataTable.Columns.Add(column, typeof(string));
@@ -77,7 +87,12 @@ namespace ConexionServidores
                     // Verificar si la fila ya existe (evitar duplicados)
                     if (!addedRows.Contains(rowHash))
                     {
-                        _dataTable.Rows.Add(rowData.ToArray());
+                        var rowArray = new string[rowData.Count];
+                        for (int i = 0; i < rowData.Count; i++)
+                        {
+                            rowArray[i] = rowData[i];
+                        }
+                        _dataTable.Rows.Add(rowArray);
                         addedRows.Add(rowHash);
                         filasAgregadas++;
                     }
@@ -95,7 +110,7 @@ namespace ConexionServidores
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error al cargar el archivo XML: {ex.Message}");
+                Console.WriteLine($"? Error al cargar el archivo XML: {ex.Message}");
                 throw;
             }
         }
@@ -122,7 +137,36 @@ namespace ConexionServidores
                 }
             }
 
-            return columns.OrderBy(c => c).ToList();
+            // Convertir HashSet a List
+            var columnList = new List<string>();
+            foreach (var col in columns)
+            {
+                columnList.Add(col);
+            }
+
+            return columnList;
+        }
+
+        /// <summary>
+        /// Ordena una lista de strings alfabéticamente sin usar LINQ.
+        /// </summary>
+        private void SortColumnsAlphabetically(List<string> columns)
+        {
+            // Usar ordenamiento de burbuja
+            for (int i = 0; i < columns.Count - 1; i++)
+            {
+                for (int j = 0; j < columns.Count - i - 1; j++)
+                {
+                    // Comparar y intercambiar si es necesario
+                    if (string.Compare(columns[j], columns[j + 1]) > 0)
+                    {
+                        // Intercambio
+                        string temp = columns[j];
+                        columns[j] = columns[j + 1];
+                        columns[j + 1] = temp;
+                    }
+                }
+            }
         }
 
         /// <summary>
@@ -162,22 +206,32 @@ namespace ConexionServidores
                 using (var writer = new StreamWriter(csvFilePath, false, System.Text.Encoding.UTF8))
                 {
                     // Escribir encabezados
-                    var headers = _dataTable.Columns.Cast<DataColumn>().Select(c => c.ColumnName);
-                    writer.WriteLine(string.Join(",", headers));
+                    for (int i = 0; i < _dataTable.Columns.Count; i++)
+                    {
+                        if (i > 0)
+                            writer.Write(",");
+                        writer.Write(_dataTable.Columns[i].ColumnName);
+                    }
+                    writer.WriteLine();
 
                     // Escribir datos
                     foreach (DataRow row in _dataTable.Rows)
                     {
-                        var values = row.ItemArray.Select(v => $"\"{v}\"");
-                        writer.WriteLine(string.Join(",", values));
+                        for (int i = 0; i < row.ItemArray.Length; i++)
+                        {
+                            if (i > 0)
+                                writer.Write(",");
+                            writer.Write($"\"{row.ItemArray[i]}\"");
+                        }
+                        writer.WriteLine();
                     }
                 }
 
-                Console.WriteLine($"Tabla exportada correctamente a: {csvFilePath}");
+                Console.WriteLine($"? Tabla exportada correctamente a: {csvFilePath}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error al exportar a CSV: {ex.Message}");
+                Console.WriteLine($"? Error al exportar a CSV: {ex.Message}");
                 throw;
             }
         }
@@ -198,9 +252,9 @@ namespace ConexionServidores
             Console.WriteLine(new string('=', 80));
 
             // Mostrar encabezados
-            foreach (DataColumn column in _dataTable.Columns)
+            for (int i = 0; i < _dataTable.Columns.Count; i++)
             {
-                Console.Write(column.ColumnName.PadRight(20) + "| ");
+                Console.Write(_dataTable.Columns[i].ColumnName.PadRight(20) + "| ");
             }
             Console.WriteLine();
             Console.WriteLine(new string('-', 80));
@@ -208,9 +262,12 @@ namespace ConexionServidores
             // Mostrar datos
             foreach (DataRow row in _dataTable.Rows)
             {
-                foreach (var cell in row.ItemArray)
+                for (int i = 0; i < row.ItemArray.Length; i++)
                 {
-                    Console.Write(cell.ToString().PadRight(20).Substring(0, 20) + "| ");
+                    string cellValue = row.ItemArray[i].ToString();
+                    if (cellValue.Length > 20)
+                        cellValue = cellValue.Substring(0, 17) + "...";
+                    Console.Write(cellValue.PadRight(20) + "| ");
                 }
                 Console.WriteLine();
             }
