@@ -40,9 +40,10 @@ while (true)
     Console.WriteLine("9. Generar gráfico");
     Console.WriteLine("10. Extraer datos primordiales");
     Console.WriteLine("11. Migrar datos a SQL Server");
-    Console.WriteLine("12. Consultar datos desde SQL Server");
-    Console.WriteLine("13. Ver columnas disponibles");
-    Console.WriteLine("14. Salir");
+    Console.WriteLine("12. Migrar datos a MariaDB");
+    Console.WriteLine("13. Consultar datos desde SQL Server");
+    Console.WriteLine("14. Ver columnas disponibles");
+    Console.WriteLine("15. Salir");
     Console.Write("\nOpción: ");
 
     string opcion = Console.ReadLine();
@@ -102,19 +103,24 @@ while (true)
 
         case "11":
             if (ValidarDatos(archivosCargados))
-                MigrarASQL(dataExtractor);
+                MigrarASQL(dataTable, dataExtractor);
             break;
 
         case "12":
-            ConsultarDesdeSQL();
+            if (ValidarDatos(archivosCargados))
+                MigrarAMariaDB(dataTable, dataExtractor);
             break;
 
         case "13":
+            ConsultarDesdeSQL();
+            break;
+
+        case "14":
             if (ValidarDatos(archivosCargados))
                 MostrarColumnasDisponibles(dataTable);
             break;
 
-        case "14":
+        case "15":
             Console.WriteLine("\n✓ Saliendo del programa...");
             return;
 
@@ -1044,12 +1050,15 @@ static void MostrarColumnasDisponibles(DataTable dataTable)
     Console.ReadKey();
 }
 
-static void MigrarASQL(DataExtractor extractor)
+static void MigrarASQL(DataTable dataTable, DataExtractor extractor)
 {
     Console.Clear();
     Console.WriteLine("╔════════════════════════════════════════╗");
     Console.WriteLine("║     MIGRAR DATOS A SQL SERVER          ║");
     Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    // Configurar el extractor
+    extractor.ConfigurarConDataTable(dataTable);
 
     Console.Write("Ingrese la cadena de conexión SQL Server:\n(ej: Server=localhost;User Id=sa;Password=YourPassword): ");
     string connectionString = Console.ReadLine();
@@ -1065,6 +1074,53 @@ static void MigrarASQL(DataExtractor extractor)
 
     Console.WriteLine("\n⏳ Creando base de datos y tabla...");
     var resultCrear = migrador.CrearTablaEnSQL().Result;
+    if (!resultCrear.Success)
+    {
+        Console.WriteLine($"✗ Error: {resultCrear.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.WriteLine("✓ Base de datos lista");
+
+    var productos = extractor.ExtraerDatos();
+    Console.WriteLine($"✓ {productos.Count} productos extraídos\n");
+
+    var resultMigracion = migrador.MigrarProductosAsync(productos).Result;
+    
+    Console.WriteLine($"\n{'='*50}");
+    Console.WriteLine(resultMigracion.Message);
+    Console.WriteLine($"{'='*50}");
+
+    Console.WriteLine("\nPresione cualquier tecla...");
+    Console.ReadKey();
+}
+
+static void MigrarAMariaDB(DataTable dataTable, DataExtractor extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║     MIGRAR DATOS A MARIADB             ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    // Configurar el extractor
+    extractor.ConfigurarConDataTable(dataTable);
+
+    Console.Write("Ingrese la cadena de conexión MariaDB:\n(ej: Server=localhost;User Id=root;Password=YourPassword): ");
+    string connectionString = Console.ReadLine();
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        Console.WriteLine("✗ Conexión no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    var migrador = new MigradorMariaDB(connectionString);
+
+    Console.WriteLine("\n⏳ Creando base de datos y tabla...");
+    var resultCrear = migrador.CrearTablaEnMariaDB().Result;
     if (!resultCrear.Success)
     {
         Console.WriteLine($"✗ Error: {resultCrear.Message}");
