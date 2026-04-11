@@ -193,6 +193,9 @@ namespace ConexionServidores
         /// </summary>
         public List<ProductoPrimordial> ExtraerDatos()
         {
+            if (_dataTable == null)
+                throw new InvalidOperationException("El DataTable no ha sido configurado. Debe llamar a ConfigurarConDataTable() primero.");
+
             var productos = new List<ProductoPrimordial>();
 
             foreach (DataRow row in _dataTable.Rows)
@@ -247,6 +250,9 @@ namespace ConexionServidores
         /// </summary>
         public List<ProductoPrimordial> ExtraerDatos(List<dynamic> datos)
         {
+            if (datos == null || datos.Count == 0)
+                throw new ArgumentException("La lista de datos no puede estar vacía.", nameof(datos));
+
             var productos = new List<ProductoPrimordial>();
 
             foreach (var item in datos)

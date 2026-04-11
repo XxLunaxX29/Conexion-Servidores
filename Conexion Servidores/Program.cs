@@ -6,7 +6,6 @@ var csvLoader = new CsvDatasetLoader();
 var jsonLoader = new JsonDatasetLoader();
 var datasetManager = new DatasetManager("MiDataset");
 var dataExtractor = new DataExtractor();
-
 DataTable dataTable = null;
 bool archivosCargados = false;
 string tipoArchivoActual = "";
@@ -40,8 +39,10 @@ while (true)
     Console.WriteLine("8. Ver estadísticas");
     Console.WriteLine("9. Generar gráfico");
     Console.WriteLine("10. Extraer datos primordiales");
-    Console.WriteLine("11. Ver columnas disponibles");
-    Console.WriteLine("12. Salir");
+    Console.WriteLine("11. Migrar datos a SQL Server");
+    Console.WriteLine("12. Consultar datos desde SQL Server");
+    Console.WriteLine("13. Ver columnas disponibles");
+    Console.WriteLine("14. Salir");
     Console.Write("\nOpción: ");
 
     string opcion = Console.ReadLine();
@@ -101,10 +102,19 @@ while (true)
 
         case "11":
             if (ValidarDatos(archivosCargados))
-                MostrarColumnasDisponibles(dataTable);
+                MigrarASQL(dataExtractor);
             break;
 
         case "12":
+            ConsultarDesdeSQL();
+            break;
+
+        case "13":
+            if (ValidarDatos(archivosCargados))
+                MostrarColumnasDisponibles(dataTable);
+            break;
+
+        case "14":
             Console.WriteLine("\n✓ Saliendo del programa...");
             return;
 
@@ -1031,5 +1041,232 @@ static void MostrarColumnasDisponibles(DataTable dataTable)
     }
 
     Console.WriteLine("\nPresione cualquier tecla...");
+    Console.ReadKey();
+}
+
+static void MigrarASQL(DataExtractor extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║     MIGRAR DATOS A SQL SERVER          ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.Write("Ingrese la cadena de conexión SQL Server:\n(ej: Server=localhost;User Id=sa;Password=YourPassword): ");
+    string connectionString = Console.ReadLine();
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        Console.WriteLine("✗ Conexión no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    var migrador = new MigradorSQL(connectionString);
+
+    Console.WriteLine("\n⏳ Creando base de datos y tabla...");
+    var resultCrear = migrador.CrearTablaEnSQL().Result;
+    if (!resultCrear.Success)
+    {
+        Console.WriteLine($"✗ Error: {resultCrear.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.WriteLine("✓ Base de datos lista");
+
+    var productos = extractor.ExtraerDatos();
+    Console.WriteLine($"✓ {productos.Count} productos extraídos\n");
+
+    var resultMigracion = migrador.MigrarProductosAsync(productos).Result;
+    
+    Console.WriteLine($"\n{'='*50}");
+    Console.WriteLine(resultMigracion.Message);
+    Console.WriteLine($"{'='*50}");
+
+    Console.WriteLine("\nPresione cualquier tecla...");
+    Console.ReadKey();
+}
+
+static void ConsultarDesdeSQL()
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║  CONSULTAR DATOS DESDE SQL SERVER      ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.Write("Ingrese la cadena de conexión SQL Server:\n(ej: Server=localhost;User Id=sa;Password=YourPassword): ");
+    string connectionString = Console.ReadLine();
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        Console.WriteLine("✗ Conexión no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    var extractor = new ExtractorSQL(connectionString);
+
+    while (true)
+    {
+        Console.Clear();
+        Console.WriteLine("╔════════════════════════════════════════╗");
+        Console.WriteLine("║        OPCIONES DE CONSULTA            ║");
+        Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+        Console.WriteLine("1. Ver todos los productos");
+        Console.WriteLine("2. Filtrar por categoría");
+        Console.WriteLine("3. Filtrar por rango de precio");
+        Console.WriteLine("4. Ver estadísticas");
+        Console.WriteLine("5. Volver al menú principal");
+        Console.Write("\nOpción: ");
+
+        string opcion = Console.ReadLine();
+
+        switch (opcion)
+        {
+            case "1":
+                VerTodosLosProductos(extractor);
+                break;
+
+            case "2":
+                FiltrarPorCategoria(extractor);
+                break;
+
+            case "3":
+                FiltrarPorPrecio(extractor);
+                break;
+
+            case "4":
+                VerEstadisticas(extractor);
+                break;
+
+            case "5":
+                return;
+
+            default:
+                Console.WriteLine("\n✗ Opción no válida. Presione cualquier tecla...");
+                Console.ReadKey();
+                break;
+        }
+    }
+}
+
+static void VerTodosLosProductos(ExtractorSQL extractor)
+{
+    Console.WriteLine("\n⏳ Obteniendo productos de SQL Server...");
+    var result = extractor.ObtenerProductosAsync().Result;
+
+    if (!result.Success)
+    {
+        Console.WriteLine($"\n✗ {result.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    extractor.MostrarTablaEnConsola(result.Data, "TODOS LOS PRODUCTOS");
+}
+
+static void FiltrarPorCategoria(ExtractorSQL extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║    FILTRAR POR CATEGORÍA               ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.Write("Ingrese la categoría a buscar: ");
+    string categoria = Console.ReadLine();
+
+    if (string.IsNullOrWhiteSpace(categoria))
+    {
+        Console.WriteLine("✗ Categoría no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.WriteLine("\n⏳ Buscando productos...");
+    var result = extractor.ObtenerProductosPorCategoriaAsync(categoria).Result;
+
+    if (!result.Success)
+    {
+        Console.WriteLine($"\n✗ {result.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    extractor.MostrarTablaEnConsola(result.Data, $"PRODUCTOS - CATEGORÍA: {categoria.ToUpper()}");
+}
+
+static void FiltrarPorPrecio(ExtractorSQL extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║    FILTRAR POR RANGO DE PRECIO         ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.Write("Ingrese el precio mínimo: $");
+    if (!decimal.TryParse(Console.ReadLine(), out decimal precioMin) || precioMin < 0)
+    {
+        Console.WriteLine("✗ Precio no válido. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.Write("Ingrese el precio máximo: $");
+    if (!decimal.TryParse(Console.ReadLine(), out decimal precioMax) || precioMax < precioMin)
+    {
+        Console.WriteLine("✗ Precio no válido. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.WriteLine("\n⏳ Buscando productos...");
+    var result = extractor.ObtenerProductosPorPrecioAsync(precioMin, precioMax).Result;
+
+    if (!result.Success)
+    {
+        Console.WriteLine($"\n✗ {result.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    extractor.MostrarTablaEnConsola(result.Data, $"PRODUCTOS - PRECIO: ${precioMin:F2} - ${precioMax:F2}");
+}
+
+static void VerEstadisticas(ExtractorSQL extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║     ESTADÍSTICAS DE PRODUCTOS          ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.WriteLine("⏳ Obteniendo estadísticas...");
+    var result = extractor.ObtenerEstadisticasAsync().Result;
+
+    if (!result.Success)
+    {
+        Console.WriteLine($"\n✗ {result.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.WriteLine("\n╔════════════════════════════════════════╗");
+    Console.WriteLine("║        ESTADÍSTICAS GENERALES          ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.WriteLine($"Total de productos:        {result.Stats["Total"]}");
+    Console.WriteLine($"Categorías únicas:         {result.Stats["CategoríasUnicas"]}");
+    Console.WriteLine($"Precio mínimo:             ${result.Stats["PrecioMínimo"]:F2}");
+    Console.WriteLine($"Precio máximo:             ${result.Stats["PrecioMáximo"]:F2}");
+    Console.WriteLine($"Precio promedio:           ${result.Stats["PrecioPromedio"]:F2}");
+    Console.WriteLine($"Cantidad total:            {result.Stats["CantidadTotal"]} unidades");
+    Console.WriteLine($"Valor total:               ${result.Stats["ValorTotal"]:F2}");
+    Console.WriteLine($"Cantidad promedio:         {result.Stats["CantidadPromedio"]:F2} unidades\n");
+
+    Console.WriteLine("Presione cualquier tecla...");
     Console.ReadKey();
 }
