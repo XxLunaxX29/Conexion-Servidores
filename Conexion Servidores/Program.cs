@@ -41,9 +41,12 @@ while (true)
     Console.WriteLine("10. Extraer datos primordiales");
     Console.WriteLine("11. Migrar datos a SQL Server");
     Console.WriteLine("12. Migrar datos a MariaDB");
-    Console.WriteLine("13. Consultar datos desde SQL Server");
-    Console.WriteLine("14. Ver columnas disponibles");
-    Console.WriteLine("15. Salir");
+    Console.WriteLine("13. Migrar datos a PostgreSQL");
+    Console.WriteLine("14. Consultar datos desde SQL Server");
+    Console.WriteLine("15. Consultar datos desde MariaDB");
+    Console.WriteLine("16. Consultar datos desde PostgreSQL");
+    Console.WriteLine("17. Ver columnas disponibles");
+    Console.WriteLine("18. Salir");
     Console.Write("\nOpción: ");
 
     string opcion = Console.ReadLine();
@@ -112,15 +115,28 @@ while (true)
             break;
 
         case "13":
-            ConsultarDesdeSQL();
+            if (ValidarDatos(archivosCargados))
+                MigrarAPostgreSQL(dataTable, dataExtractor);
             break;
 
         case "14":
+            ConsultarDesdeSQL();
+            break;
+
+        case "15":
+            ConsultarDesdeMariaDB();
+            break;
+
+        case "16":
+            ConsultarDesdePostgreSQL();
+            break;
+
+        case "17":
             if (ValidarDatos(archivosCargados))
                 MostrarColumnasDisponibles(dataTable);
             break;
 
-        case "15":
+        case "18":
             Console.WriteLine("\n✓ Saliendo del programa...");
             return;
 
@@ -618,7 +634,6 @@ static void ExtraerDatosPrimordiales(DataTable dataTable, DataExtractor extracto
     Console.WriteLine("║     EXTRAER DATOS PRIMORDIALES (ID, NOMBRE, ETC)  ║");
     Console.WriteLine("╚════════════════════════════════════════════════════╝\n");
 
-    // Configurar el extractor
     extractor.ConfigurarConDataTable(dataTable);
 
     while (true)
@@ -978,11 +993,11 @@ static void MostrarGraficoValoresIndividuales(string columnaSeleccionada, List<d
     Console.ReadKey();
 }
 
-static void MostrarHistogramaFrecuencias(string coloniaSeleccionada, List<double> valores)
+static void MostrarHistogramaFrecuencias(string columnaSeleccionada, List<double> valores)
 {
     Console.Clear();
     Console.WriteLine($"╔════════════════════════════════════════╗");
-    Console.WriteLine($"║  HISTOGRAMA DE FRECUENCIAS: {coloniaSeleccionada}");
+    Console.WriteLine($"║  HISTOGRAMA DE FRECUENCIAS: {columnaSeleccionada}");
     Console.WriteLine($"╚════════════════════════════════════════╝\n");
 
     var frecuencias = new Dictionary<double, int>();
@@ -1057,7 +1072,6 @@ static void MigrarASQL(DataTable dataTable, DataExtractor extractor)
     Console.WriteLine("║     MIGRAR DATOS A SQL SERVER          ║");
     Console.WriteLine("╚════════════════════════════════════════╝\n");
 
-    // Configurar el extractor
     extractor.ConfigurarConDataTable(dataTable);
 
     Console.Write("Ingrese la cadena de conexión SQL Server:\n(ej: Server=localhost;User Id=sa;Password=YourPassword): ");
@@ -1104,10 +1118,9 @@ static void MigrarAMariaDB(DataTable dataTable, DataExtractor extractor)
     Console.WriteLine("║     MIGRAR DATOS A MARIADB             ║");
     Console.WriteLine("╚════════════════════════════════════════╝\n");
 
-    // Configurar el extractor
     extractor.ConfigurarConDataTable(dataTable);
 
-    Console.Write("Ingrese la cadena de conexión MariaDB:\n(ej: Server=localhost;User Id=root;Password=YourPassword): ");
+    Console.Write("Ingrese la cadena de conexión MariaDB:\n(ej: Server=192.168.1.9;User Id=root;Password=Garo2006): ");
     string connectionString = Console.ReadLine();
 
     if (string.IsNullOrWhiteSpace(connectionString))
@@ -1142,6 +1155,140 @@ static void MigrarAMariaDB(DataTable dataTable, DataExtractor extractor)
 
     Console.WriteLine("\nPresione cualquier tecla...");
     Console.ReadKey();
+}
+
+static void MigrarAPostgreSQL(DataTable dataTable, DataExtractor extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║     MIGRAR DATOS A POSTGRESQL          ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    extractor.ConfigurarConDataTable(dataTable);
+
+    // Mostrar columnas disponibles
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║      COLUMNAS EN EL ARCHIVO            ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+    
+    for (int i = 0; i < dataTable.Columns.Count; i++)
+    {
+        Console.WriteLine($"{i + 1}. {dataTable.Columns[i].ColumnName}");
+    }
+
+    // Mapeo automático
+    Console.WriteLine("\n╔════════════════════════════════════════╗");
+    Console.WriteLine("║        REALIZANDO MAPEO                ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    // Mapear automáticamente según similitud de nombres
+    MapearColumnasAutomaticamente(dataTable, extractor);
+
+    var mapeo = extractor.ObtenerMapeo();
+    if (mapeo.Count == 0)
+    {
+        Console.WriteLine("⚠ No se detectaron campos automáticamente");
+        Console.WriteLine("  Mapee manualmente en la opción 10 primero\n");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.WriteLine("✓ Campos mapeados:");
+    foreach (var m in mapeo)
+    {
+        Console.WriteLine($"  {m.Key.ToUpper().PadRight(20)} → {m.Value}");
+    }
+
+    Console.WriteLine("\n");
+    Console.Write("Ingrese la cadena de conexión PostgreSQL:\n(ej: Server=localhost;User Id=postgres;Password=YourPassword): ");
+    string connectionString = Console.ReadLine();
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        Console.WriteLine("✗ Conexión no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    var migrador = new MigradorPostgreSQL(connectionString);
+
+    Console.WriteLine("\n⏳ Creando base de datos y tabla...");
+    var resultCrear = migrador.CrearTablaEnPostgreSQL().Result;
+    if (!resultCrear.Success)
+    {
+        Console.WriteLine($"✗ Error: {resultCrear.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.WriteLine("✓ Base de datos lista");
+
+    var productos = extractor.ExtraerDatos();
+    Console.WriteLine($"✓ {productos.Count} productos extraídos\n");
+
+    if (productos.Count == 0)
+    {
+        Console.WriteLine("⚠ No hay productos extraídos. Verifique el mapeo.");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    var resultMigracion = migrador.MigrarProductosAsync(productos).Result;
+    
+    Console.WriteLine($"\n{'='*50}");
+    Console.WriteLine(resultMigracion.Message);
+    Console.WriteLine($"{'='*50}");
+
+    Console.WriteLine("\nPresione cualquier tecla...");
+    Console.ReadKey();
+}
+
+// Nuevo método para mapear automáticamente
+static void MapearColumnasAutomaticamente(DataTable dataTable, DataExtractor extractor)
+{
+    var columnNames = dataTable.Columns.Cast<DataColumn>().Select(c => c.ColumnName.ToLower()).ToList();
+
+    // Mapeos posibles según el formato de tu archivo
+    var mapeos = new Dictionary<string, string>
+    {
+        { "id", "ID_Venta" },
+        { "nombre", "Nombre_Producto" },
+        { "categoria", "Categoria" },
+        { "valor", "Total_Venta" },
+        { "cantidad", "Cantidad" },
+        { "preciounitario", "Precio_Unitario" }
+    };
+
+    foreach (var mapeo in mapeos)
+    {
+        // Buscar columna que coincida (case-insensitive)
+        var columnaExistente = columnNames.FirstOrDefault(c => 
+            c.Equals(mapeo.Value.ToLower()) || 
+            c.Contains(mapeo.Value.ToLower().Replace("_", ""))
+        );
+
+        if (columnaExistente != null)
+        {
+            // Encontrar el nombre original con su case
+            string columnaOriginal = dataTable.Columns.Cast<DataColumn>()
+                .FirstOrDefault(c => c.ColumnName.ToLower() == columnaExistente)?.ColumnName;
+
+            if (columnaOriginal != null)
+            {
+                try
+                {
+                    extractor.MapearColumnaPersonalizada(mapeo.Key, columnaOriginal);
+                }
+                catch
+                {
+                    // Continuar si hay error
+                }
+            }
+        }
+    }
 }
 
 static void ConsultarDesdeSQL()
@@ -1184,22 +1331,17 @@ static void ConsultarDesdeSQL()
             case "1":
                 VerTodosLosProductos(extractor);
                 break;
-
             case "2":
                 FiltrarPorCategoria(extractor);
                 break;
-
             case "3":
                 FiltrarPorPrecio(extractor);
                 break;
-
             case "4":
                 VerEstadisticas(extractor);
                 break;
-
             case "5":
                 return;
-
             default:
                 Console.WriteLine("\n✗ Opción no válida. Presione cualquier tecla...");
                 Console.ReadKey();
@@ -1318,6 +1460,362 @@ static void VerEstadisticas(ExtractorSQL extractor)
     Console.WriteLine($"Categorías únicas:         {result.Stats["CategoríasUnicas"]}");
     Console.WriteLine($"Precio mínimo:             ${result.Stats["PrecioMínimo"]:F2}");
     Console.WriteLine($"Precio máximo:             ${result.Stats["PrecioMáximo"]:F2}");
+    Console.WriteLine($"Precio promedio:           ${result.Stats["PrecioPromedio"]:F2}");
+    Console.WriteLine($"Cantidad total:            {result.Stats["CantidadTotal"]} unidades");
+    Console.WriteLine($"Valor total:               ${result.Stats["ValorTotal"]:F2}");
+    Console.WriteLine($"Cantidad promedio:         {result.Stats["CantidadPromedio"]:F2} unidades\n");
+
+    Console.WriteLine("Presione cualquier tecla...");
+    Console.ReadKey();
+}
+
+static void ConsultarDesdeMariaDB()
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║  CONSULTAR DATOS DESDE MARIADB         ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.Write("Ingrese la cadena de conexión MariaDB:\n(ej: Server=192.168.1.9;User Id=root;Password=Garo2006): ");
+    string connectionString = Console.ReadLine();
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        Console.WriteLine("✗ Conexión no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    var extractor = new ExtractorMariaDB(connectionString);
+
+    while (true)
+    {
+        Console.Clear();
+        Console.WriteLine("╔════════════════════════════════════════╗");
+        Console.WriteLine("║        OPCIONES DE CONSULTA            ║");
+        Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+        Console.WriteLine("1. Ver todos los productos");
+        Console.WriteLine("2. Filtrar por categoría");
+        Console.WriteLine("3. Filtrar por rango de precio");
+        Console.WriteLine("4. Ver estadísticas");
+        Console.WriteLine("5. Volver al menú principal");
+        Console.Write("\nOpción: ");
+
+        string opcion = Console.ReadLine();
+
+        switch (opcion)
+        {
+            case "1":
+                VerTodosLosProductosMariaDB(extractor);
+                break;
+            case "2":
+                FiltrarPorCategoriaMariaDB(extractor);
+                break;
+            case "3":
+                FiltrarPorPrecioMariaDB(extractor);
+                break;
+            case "4":
+                VerEstadisticasMariaDB(extractor);
+                break;
+            case "5":
+                return;
+            default:
+                Console.WriteLine("\n✗ Opción no válida. Presione cualquier tecla...");
+                Console.ReadKey();
+                break;
+        }
+    }
+}
+
+static void VerTodosLosProductosMariaDB(ExtractorMariaDB extractor)
+{
+    Console.WriteLine("\n⏳ Obteniendo productos de MariaDB...");
+    var result = extractor.ObtenerProductosAsync().Result;
+
+    if (!result.Success)
+    {
+        Console.WriteLine($"\n✗ {result.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    extractor.MostrarTablaEnConsola(result.Data, "TODOS LOS PRODUCTOS");
+}
+
+static void FiltrarPorCategoriaMariaDB(ExtractorMariaDB extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║    FILTRAR POR CATEGORÍA               ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.Write("Ingrese la categoría a buscar: ");
+    string categoria = Console.ReadLine();
+
+    if (string.IsNullOrWhiteSpace(categoria))
+    {
+        Console.WriteLine("✗ Categoría no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.WriteLine("\n⏳ Buscando productos...");
+    var result = extractor.ObtenerProductosPorCategoriaAsync(categoria).Result;
+
+    if (!result.Success)
+    {
+        Console.WriteLine($"\n✗ {result.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    extractor.MostrarTablaEnConsola(result.Data, $"PRODUCTOS - CATEGORÍA: {categoria.ToUpper()}");
+}
+
+static void FiltrarPorPrecioMariaDB(ExtractorMariaDB extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║    FILTRAR POR RANGO DE PRECIO         ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.Write("Ingrese el precio mínimo: $");
+    if (!decimal.TryParse(Console.ReadLine(), out decimal precioMin) || precioMin < 0)
+    {
+        Console.WriteLine("✗ Precio no válido. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.Write("Ingrese el precio máximo: $");
+    if (!decimal.TryParse(Console.ReadLine(), out decimal precioMax) || precioMax < precioMin)
+    {
+        Console.WriteLine("✗ Precio no válido. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.WriteLine("\n⏳ Buscando productos...");
+    var result = extractor.ObtenerProductosPorPrecioAsync(precioMin, precioMax).Result;
+
+    if (!result.Success)
+    {
+        Console.WriteLine($"\n✗ {result.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    extractor.MostrarTablaEnConsola(result.Data, $"PRODUCTOS - PRECIO: ${precioMin:F2} - ${precioMax:F2}");
+}
+
+static void VerEstadisticasMariaDB(ExtractorMariaDB extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║     ESTADÍSTICAS DE PRODUCTOS          ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.WriteLine("⏳ Obteniendo estadísticas...");
+    var result = extractor.ObtenerEstadisticasAsync().Result;
+
+    if (!result.Success)
+    {
+        Console.WriteLine($"\n✗ {result.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.WriteLine("\n╔════════════════════════════════════════╗");
+    Console.WriteLine("║        ESTADÍSTICAS GENERALES          ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.WriteLine($"Total de productos:        {result.Stats["Total"]}");
+    Console.WriteLine($"Categorías únicas:         {result.Stats["CategoriasUnicas"]}");
+    Console.WriteLine($"Precio mínimo:             ${result.Stats["PrecioMinimo"]:F2}");
+    Console.WriteLine($"Precio máximo:             ${result.Stats["PrecioMaximo"]:F2}");
+    Console.WriteLine($"Precio promedio:           ${result.Stats["PrecioPromedio"]:F2}");
+    Console.WriteLine($"Cantidad total:            {result.Stats["CantidadTotal"]} unidades");
+    Console.WriteLine($"Valor total:               ${result.Stats["ValorTotal"]:F2}");
+    Console.WriteLine($"Cantidad promedio:         {result.Stats["CantidadPromedio"]:F2} unidades\n");
+
+    Console.WriteLine("Presione cualquier tecla...");
+    Console.ReadKey();
+}
+
+static void ConsultarDesdePostgreSQL()
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║  CONSULTAR DATOS DESDE POSTGRESQL      ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.Write("Ingrese la cadena de conexión PostgreSQL:\n(ej: Server=localhost;User Id=postgres;Password=YourPassword): ");
+    string connectionString = Console.ReadLine();
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        Console.WriteLine("✗ Conexión no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    var extractor = new ExtractorPostgreSQL(connectionString);
+
+    while (true)
+    {
+        Console.Clear();
+        Console.WriteLine("╔════════════════════════════════════════╗");
+        Console.WriteLine("║        OPCIONES DE CONSULTA            ║");
+        Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+        Console.WriteLine("1. Ver todos los productos");
+        Console.WriteLine("2. Filtrar por categoría");
+        Console.WriteLine("3. Filtrar por rango de precio");
+        Console.WriteLine("4. Ver estadísticas");
+        Console.WriteLine("5. Volver al menú principal");
+        Console.Write("\nOpción: ");
+
+        string opcion = Console.ReadLine();
+
+        switch (opcion)
+        {
+            case "1":
+                VerTodosLosProductosPostgreSQL(extractor);
+                break;
+            case "2":
+                FiltrarPorCategoriaPostgreSQL(extractor);
+                break;
+            case "3":
+                FiltrarPorPrecioPostgreSQL(extractor);
+                break;
+            case "4":
+                VerEstadisticasPostgreSQL(extractor);
+                break;
+            case "5":
+                return;
+            default:
+                Console.WriteLine("\n✗ Opción no válida. Presione cualquier tecla...");
+                Console.ReadKey();
+                break;
+        }
+    }
+}
+
+static void VerTodosLosProductosPostgreSQL(ExtractorPostgreSQL extractor)
+{
+    Console.WriteLine("\n⏳ Obteniendo productos de PostgreSQL...");
+    var result = extractor.ObtenerProductosAsync().Result;
+
+    if (!result.Success)
+    {
+        Console.WriteLine($"\n✗ {result.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    extractor.MostrarTablaEnConsola(result.Data, "TODOS LOS PRODUCTOS");
+}
+
+static void FiltrarPorCategoriaPostgreSQL(ExtractorPostgreSQL extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║    FILTRAR POR CATEGORÍA               ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.Write("Ingrese la categoría a buscar: ");
+    string categoria = Console.ReadLine();
+
+    if (string.IsNullOrWhiteSpace(categoria))
+    {
+        Console.WriteLine("✗ Categoría no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.WriteLine("\n⏳ Buscando productos...");
+    var result = extractor.ObtenerProductosPorCategoriaAsync(categoria).Result;
+
+    if (!result.Success)
+    {
+        Console.WriteLine($"\n✗ {result.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    extractor.MostrarTablaEnConsola(result.Data, $"PRODUCTOS - CATEGORÍA: {categoria.ToUpper()}");
+}
+
+static void FiltrarPorPrecioPostgreSQL(ExtractorPostgreSQL extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║    FILTRAR POR RANGO DE PRECIO         ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.Write("Ingrese el precio mínimo: $");
+    if (!decimal.TryParse(Console.ReadLine(), out decimal precioMin) || precioMin < 0)
+    {
+        Console.WriteLine("✗ Precio no válido. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.Write("Ingrese el precio máximo: $");
+    if (!decimal.TryParse(Console.ReadLine(), out decimal precioMax) || precioMax < precioMin)
+    {
+        Console.WriteLine("✗ Precio no válido. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.WriteLine("\n⏳ Buscando productos...");
+    var result = extractor.ObtenerProductosPorPrecioAsync(precioMin, precioMax).Result;
+
+    if (!result.Success)
+    {
+        Console.WriteLine($"\n✗ {result.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    extractor.MostrarTablaEnConsola(result.Data, $"PRODUCTOS - PRECIO: ${precioMin:F2} - ${precioMax:F2}");
+}
+
+static void VerEstadisticasPostgreSQL(ExtractorPostgreSQL extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║     ESTADÍSTICAS DE PRODUCTOS          ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.WriteLine("⏳ Obteniendo estadísticas...");
+    var result = extractor.ObtenerEstadisticasAsync().Result;
+
+    if (!result.Success)
+    {
+        Console.WriteLine($"\n✗ {result.Message}");
+        Console.WriteLine("Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    Console.WriteLine("\n╔════════════════════════════════════════╗");
+    Console.WriteLine("║        ESTADÍSTICAS GENERALES          ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.WriteLine($"Total de productos:        {result.Stats["Total"]}");
+    Console.WriteLine($"Categorías únicas:         {result.Stats["CategoriasUnicas"]}");
+    Console.WriteLine($"Precio mínimo:             ${result.Stats["PrecioMinimo"]:F2}");
+    Console.WriteLine($"Precio máximo:             ${result.Stats["PrecioMaximo"]:F2}");
     Console.WriteLine($"Precio promedio:           ${result.Stats["PrecioPromedio"]:F2}");
     Console.WriteLine($"Cantidad total:            {result.Stats["CantidadTotal"]} unidades");
     Console.WriteLine($"Valor total:               ${result.Stats["ValorTotal"]:F2}");
