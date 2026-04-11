@@ -5,6 +5,7 @@ var xmlLoader = new XmlDatasetLoader();
 var csvLoader = new CsvDatasetLoader();
 var jsonLoader = new JsonDatasetLoader();
 var datasetManager = new DatasetManager("MiDataset");
+var dataExtractor = new DataExtractor();
 
 DataTable dataTable = null;
 bool archivosCargados = false;
@@ -38,7 +39,9 @@ while (true)
     Console.WriteLine("7. Agrupar datos");
     Console.WriteLine("8. Ver estadísticas");
     Console.WriteLine("9. Generar gráfico");
-    Console.WriteLine("10. Salir");
+    Console.WriteLine("10. Extraer datos primordiales");
+    Console.WriteLine("11. Ver columnas disponibles");
+    Console.WriteLine("12. Salir");
     Console.Write("\nOpción: ");
 
     string opcion = Console.ReadLine();
@@ -92,6 +95,16 @@ while (true)
             break;
 
         case "10":
+            if (ValidarDatos(archivosCargados))
+                ExtraerDatosPrimordiales(dataTable, dataExtractor);
+            break;
+
+        case "11":
+            if (ValidarDatos(archivosCargados))
+                MostrarColumnasDisponibles(dataTable);
+            break;
+
+        case "12":
             Console.WriteLine("\n✓ Saliendo del programa...");
             return;
 
@@ -582,6 +595,183 @@ static void AgruparDatos(DatasetManager datasetManager, DataTable dataTable)
     Console.ReadKey();
 }
 
+static void ExtraerDatosPrimordiales(DataTable dataTable, DataExtractor extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════════════════╗");
+    Console.WriteLine("║     EXTRAER DATOS PRIMORDIALES (ID, NOMBRE, ETC)  ║");
+    Console.WriteLine("╚════════════════════════════════════════════════════╝\n");
+
+    // Configurar el extractor
+    extractor.ConfigurarConDataTable(dataTable);
+
+    while (true)
+    {
+        Console.Clear();
+        Console.WriteLine("╔════════════════════════════════════════════════════╗");
+        Console.WriteLine("║              OPCIONES DE EXTRACCIÓN                ║");
+        Console.WriteLine("╚════════════════════════════════════════════════════╝\n");
+
+        var mapeo = extractor.ObtenerMapeo();
+
+        if (mapeo.Count > 0)
+        {
+            Console.WriteLine("Campos detectados:");
+            foreach (var m in mapeo)
+            {
+                Console.WriteLine($"  ✓ {m.Key.ToUpper()} → '{m.Value}'");
+            }
+            Console.WriteLine();
+        }
+
+        Console.WriteLine("Opciones:");
+        Console.WriteLine("1. Mostrar datos primordiales");
+        Console.WriteLine("2. Reasignar campos automáticamente");
+        Console.WriteLine("3. Mapear campo personalizado");
+        Console.WriteLine("4. Exportar datos primordiales a CSV");
+        Console.WriteLine("5. Volver al menú principal");
+        Console.Write("\nOpción: ");
+
+        string opcion = Console.ReadLine();
+
+        switch (opcion)
+        {
+            case "1":
+                var productos = extractor.ExtraerDatos();
+                extractor.MostrarDatosPrimordiales(productos);
+                Console.WriteLine("Presione cualquier tecla...");
+                Console.ReadKey();
+                break;
+
+            case "2":
+                extractor.LimpiarMapeo();
+                extractor.ConfigurarConDataTable(dataTable);
+                Console.WriteLine("\n✓ Campos reasignados. Presione cualquier tecla...");
+                Console.ReadKey();
+                break;
+
+            case "3":
+                MapearCampoPersonalizado(dataTable, extractor);
+                break;
+
+            case "4":
+                ExportarDatosPrimordiales(extractor);
+                break;
+
+            case "5":
+                return;
+
+            default:
+                Console.WriteLine("\n✗ Opción no válida. Presione cualquier tecla...");
+                Console.ReadKey();
+                break;
+        }
+    }
+}
+
+static void MapearCampoPersonalizado(DataTable dataTable, DataExtractor extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║      MAPEAR CAMPO PERSONALIZADO        ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.WriteLine("Campos estándar disponibles:");
+    Console.WriteLine("1. id");
+    Console.WriteLine("2. nombre");
+    Console.WriteLine("3. categoria");
+    Console.WriteLine("4. valor");
+    Console.WriteLine("5. cantidad");
+    Console.WriteLine("6. preciounitario");
+    Console.Write("\nSeleccione campo (1-6): ");
+
+    string[] campos = { "id", "nombre", "categoria", "valor", "cantidad", "preciounitario" };
+    if (!int.TryParse(Console.ReadLine(), out int campoIndex) || campoIndex < 1 || campoIndex > 6)
+    {
+        Console.WriteLine("✗ Opción no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    string campoEstandar = campos[campoIndex - 1];
+
+    Console.WriteLine("\nColumnas disponibles en el DataTable:");
+    for (int i = 0; i < dataTable.Columns.Count; i++)
+    {
+        Console.WriteLine($"{i + 1}. {dataTable.Columns[i].ColumnName}");
+    }
+
+    Console.Write("\nSeleccione columna (número): ");
+    if (!int.TryParse(Console.ReadLine(), out int columnaIndex) || columnaIndex < 1 || columnaIndex > dataTable.Columns.Count)
+    {
+        Console.WriteLine("✗ Opción no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    string nombreColumnaReal = dataTable.Columns[columnaIndex - 1].ColumnName;
+
+    try
+    {
+        extractor.MapearColumnaPersonalizada(campoEstandar, nombreColumnaReal);
+        Console.WriteLine("✓ Mapeo realizado correctamente. Presione cualquier tecla...");
+        Console.ReadKey();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"✗ Error: {ex.Message}. Presione cualquier tecla...");
+        Console.ReadKey();
+    }
+}
+
+static void ExportarDatosPrimordiales(DataExtractor extractor)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════╗");
+    Console.WriteLine("║    EXPORTAR DATOS PRIMORDIALES         ║");
+    Console.WriteLine("╚════════════════════════════════════════╝\n");
+
+    Console.Write("Ingrese la ruta del archivo CSV (ej: primordiales.csv): ");
+    string rutaArchivo = Console.ReadLine();
+
+    if (string.IsNullOrWhiteSpace(rutaArchivo))
+    {
+        Console.WriteLine("✗ Ruta no válida. Presione cualquier tecla...");
+        Console.ReadKey();
+        return;
+    }
+
+    try
+    {
+        var productos = extractor.ExtraerDatos();
+        var dataTableExportacion = extractor.ExportarADataTable(productos);
+
+        using (var writer = new StreamWriter(rutaArchivo, false, System.Text.Encoding.UTF8))
+        {
+            // Escribir encabezados
+            var headers = dataTableExportacion.Columns.Cast<DataColumn>().Select(c => c.ColumnName);
+            writer.WriteLine(string.Join(",", headers));
+
+            // Escribir datos
+            foreach (DataRow row in dataTableExportacion.Rows)
+            {
+                var values = row.ItemArray.Select(v => $"\"{v}\"");
+                writer.WriteLine(string.Join(",", values));
+            }
+        }
+
+        Console.WriteLine($"\n✓ Datos exportados correctamente a: {rutaArchivo}");
+        Console.WriteLine($"  Total de registros: {productos.Count}");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"\n✗ Error al exportar: {ex.Message}");
+    }
+
+    Console.WriteLine("Presione cualquier tecla...");
+    Console.ReadKey();
+}
+
 static void GenerarGrafico(DataTable dataTable)
 {
     Console.Clear();
@@ -772,11 +962,11 @@ static void MostrarGraficoValoresIndividuales(string columnaSeleccionada, List<d
     Console.ReadKey();
 }
 
-static void MostrarHistogramaFrecuencias(string columnaSeleccionada, List<double> valores)
+static void MostrarHistogramaFrecuencias(string coloniaSeleccionada, List<double> valores)
 {
     Console.Clear();
     Console.WriteLine($"╔════════════════════════════════════════╗");
-    Console.WriteLine($"║  HISTOGRAMA DE FRECUENCIAS: {columnaSeleccionada}");
+    Console.WriteLine($"║  HISTOGRAMA DE FRECUENCIAS: {coloniaSeleccionada}");
     Console.WriteLine($"╚════════════════════════════════════════╝\n");
 
     var frecuencias = new Dictionary<double, int>();
@@ -823,6 +1013,22 @@ static void MostrarHistogramaFrecuencias(string columnaSeleccionada, List<double
     Console.WriteLine($"║  Máximo: {valores.Max():F2}");
     Console.WriteLine($"║  Mínimo: {valores.Min():F2}");
     Console.WriteLine("╚════════════════════════════════════════╝");
+
+    Console.WriteLine("\nPresione cualquier tecla...");
+    Console.ReadKey();
+}
+
+static void MostrarColumnasDisponibles(DataTable dataTable)
+{
+    Console.Clear();
+    Console.WriteLine("╔════════════════════════════════════════════╗");
+    Console.WriteLine("║        COLUMNAS DISPONIBLES EN LA TABLA    ║");
+    Console.WriteLine("╚════════════════════════════════════════════╝\n");
+
+    for (int i = 0; i < dataTable.Columns.Count; i++)
+    {
+        Console.WriteLine($"  {i + 1}. {dataTable.Columns[i].ColumnName}");
+    }
 
     Console.WriteLine("\nPresione cualquier tecla...");
     Console.ReadKey();
