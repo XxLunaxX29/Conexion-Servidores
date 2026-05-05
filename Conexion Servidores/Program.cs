@@ -577,7 +577,7 @@ static void FiltrarDatos(DataTable dataTable)
         string nombre = column.ColumnName.Length > anchoColumna 
             ? column.ColumnName.Substring(0, anchoColumna - 2) + ".." 
             : column.ColumnName;
-        Console.Write(nombre.PadRight(anchoColumna) + "| ");
+        Console.Write(nombre.PadRight(anchoColumna) + "|  ");
     }
     Console.WriteLine();
     Console.WriteLine(new string('-', Console.WindowWidth - 1));
